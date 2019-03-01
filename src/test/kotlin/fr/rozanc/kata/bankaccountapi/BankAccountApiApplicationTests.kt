@@ -135,8 +135,6 @@ class BankAccountApiApplicationTests {
     // region Statement
     @Test
     fun `Given I have an account, When I make operations And I ask a statement, Then I can see my history`() {
-//        `when`(clock.instant()).thenReturn(Instant)
-
         println(System.currentTimeMillis())
 
         val accountNumber = accountService.createAccount(80.00).accountNumber
@@ -160,15 +158,15 @@ class BankAccountApiApplicationTests {
                 .andExpect(status().isOk)
                 .andExpect(jsonPath("$", hasSize<List<BankAccountStatement>>(3)))
                 .andExpect(jsonPath("$[0].accountNumber", `is`(accountNumber)))
-                .andExpect(jsonPath("$[0].date", `is`("2019-03-02T00:01:26.185")))
+                .andExpect(jsonPath("$[0].date", `is`("2019-03-01T23:01:26.185")))
                 .andExpect(jsonPath("$[0].amount", `is`(80.00)))
                 .andExpect(jsonPath("$[0].balance", `is`(80.00)))
                 .andExpect(jsonPath("$[1].accountNumber", `is`(accountNumber)))
-                .andExpect(jsonPath("$[1].date", `is`("2019-03-02T00:03:06.185")))
+                .andExpect(jsonPath("$[1].date", `is`("2019-03-01T23:03:06.185")))
                 .andExpect(jsonPath("$[1].amount", `is`(20.05)))
                 .andExpect(jsonPath("$[1].balance", `is`(100.05)))
                 .andExpect(jsonPath("$[2].accountNumber", `is`(accountNumber)))
-                .andExpect(jsonPath("$[2].date", `is`("2019-03-02T00:04:46.185")))
+                .andExpect(jsonPath("$[2].date", `is`("2019-03-01T23:04:46.185")))
                 .andExpect(jsonPath("$[2].amount", `is`(-75.00)))
                 .andExpect(jsonPath("$[2].balance", `is`(25.05)))
     }

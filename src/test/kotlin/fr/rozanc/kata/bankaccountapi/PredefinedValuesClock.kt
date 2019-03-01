@@ -7,7 +7,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 class PredefinedValuesClock(private val millis: List<Long>) : Clock() {
 
-    private val systemClock: Clock = Clock.systemDefaultZone()
+    private val systemClock: Clock = Clock.systemUTC()
 
     private val index = AtomicInteger()
 
