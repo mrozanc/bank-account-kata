@@ -12,19 +12,38 @@ import org.junit.runner.RunWith
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.test.context.TestConfiguration
+import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Import
+import org.springframework.context.annotation.Primary
+import org.springframework.context.annotation.Profile
 import org.springframework.http.MediaType
+import org.springframework.test.context.ActiveProfiles
 import org.springframework.test.context.junit4.SpringRunner
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
-import org.springframework.test.web.servlet.result.MockMvcResultMatchers
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import java.time.Clock
 
+@ActiveProfiles("test")
 @RunWith(SpringRunner::class)
 @SpringBootTest
 @AutoConfigureMockMvc
 class BankAccountApiApplicationTests {
+
+    @Profile("test")
+    @Import(BankAccountApiApplication::class)
+    @TestConfiguration
+    class BankAccountTestConfiguration {
+
+        @Bean
+        @Primary
+        fun clock(): Clock = PredefinedValuesClock(listOf(1551481286185,
+                1551481386185,
+                1551481486185))
+    }
 
     @Autowired
     private lateinit var mvc: MockMvc
@@ -33,11 +52,15 @@ class BankAccountApiApplicationTests {
     private lateinit var accountService: BankAccountService
 
     @Autowired
+    private lateinit var clock: Clock
+
+    @Autowired
     private lateinit var objectMapper: ObjectMapper
 
     @Before
     fun setUp() {
         (accountService as KataBankAccountService).reset()
+        (clock as PredefinedValuesClock).reset()
     }
 
     // region Deposit
@@ -112,6 +135,10 @@ class BankAccountApiApplicationTests {
     // region Statement
     @Test
     fun `Given I have an account, When I make operations And I ask a statement, Then I can see my history`() {
+//        `when`(clock.instant()).thenReturn(Instant)
+
+        println(System.currentTimeMillis())
+
         val accountNumber = accountService.createAccount(80.00).accountNumber
 
         mvc.perform(post("/api/account/deposit")
@@ -131,9 +158,19 @@ class BankAccountApiApplicationTests {
         mvc.perform(get("/api/account/$accountNumber/statements")
                 .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk)
-                .andExpect(jsonPath("$", hasSize<List<BankAccountStatement>>(1)))
-                .andExpect(jsonPath("$.accountNumber", `is`(accountNumber)))
-                .andExpect(jsonPath("$.balance", `is`(25.05)))
+                .andExpect(jsonPath("$", hasSize<List<BankAccountStatement>>(3)))
+                .andExpect(jsonPath("$[0].accountNumber", `is`(accountNumber)))
+                .andExpect(jsonPath("$[0].date", `is`("2019-03-02T00:01:26.185")))
+                .andExpect(jsonPath("$[0].amount", `is`(80.00)))
+                .andExpect(jsonPath("$[0].balance", `is`(80.00)))
+                .andExpect(jsonPath("$[1].accountNumber", `is`(accountNumber)))
+                .andExpect(jsonPath("$[1].date", `is`("2019-03-02T00:03:06.185")))
+                .andExpect(jsonPath("$[1].amount", `is`(20.05)))
+                .andExpect(jsonPath("$[1].balance", `is`(100.05)))
+                .andExpect(jsonPath("$[2].accountNumber", `is`(accountNumber)))
+                .andExpect(jsonPath("$[2].date", `is`("2019-03-02T00:04:46.185")))
+                .andExpect(jsonPath("$[2].amount", `is`(-75.00)))
+                .andExpect(jsonPath("$[2].balance", `is`(25.05)))
     }
 
     @Test
