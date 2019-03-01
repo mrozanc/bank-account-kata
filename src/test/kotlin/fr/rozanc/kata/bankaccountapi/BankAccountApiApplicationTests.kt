@@ -1,12 +1,12 @@
 package fr.rozanc.kata.bankaccountapi
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import fr.rozanc.kata.bankaccountapi.model.AccountOperation
-import fr.rozanc.kata.bankaccountapi.model.AccountStatement
+import fr.rozanc.kata.bankaccountapi.model.BankAccountOperation
+import fr.rozanc.kata.bankaccountapi.model.BankAccountStatement
 import org.hamcrest.Matchers.`is`
 import org.hamcrest.collection.IsCollectionWithSize.hasSize
-import org.junit.Assert
 import org.junit.Assert.assertEquals
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.springframework.beans.factory.annotation.Autowired
@@ -17,6 +17,7 @@ import org.springframework.test.context.junit4.SpringRunner
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 
@@ -34,6 +35,11 @@ class BankAccountApiApplicationTests {
     @Autowired
     private lateinit var objectMapper: ObjectMapper
 
+    @Before
+    fun setUp() {
+        (accountService as KataBankAccountService).reset()
+    }
+
     // region Deposit
     // In order to save money
     // As a bank client
@@ -45,22 +51,21 @@ class BankAccountApiApplicationTests {
 
         mvc.perform(post("/api/account/deposit")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(AccountOperation(accountNumber, 121.05))))
+                .content(objectMapper.writeValueAsString(BankAccountOperation(accountNumber, 121.05))))
                 .andExpect(status().isOk)
                 .andExpect(jsonPath("$.accountNumber", `is`(accountNumber)))
                 .andExpect(jsonPath("$.balance", `is`(133.05)))
 
-        assertEquals(133.05, accountService.getAccount(accountNumber))
+        assertEquals(133.05, accountService.getAccount(accountNumber).balance, 0.01)
     }
 
     @Test
     fun `Given I don't have an account, When I make a deposit, I have an error`() {
         mvc.perform(post("/api/account/deposit")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(AccountOperation(1, 121.05))))
-                .andExpect(status().is4xxClientError)
-                .andExpect(jsonPath("$.accountNumber", `is`(1)))
-                .andExpect(jsonPath("$.message", `is`("Account not found")))
+                .content(objectMapper.writeValueAsString(BankAccountOperation(1, 121.05))))
+                .andExpect(status().`is`(404))
+//                .andExpect(jsonPath("$.message", `is`("Account not found")))
     }
 
     // endregion Deposit
@@ -75,7 +80,7 @@ class BankAccountApiApplicationTests {
 
         mvc.perform(post("/api/account/withdrawal")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(AccountOperation(accountNumber, 121.50))))
+                .content(objectMapper.writeValueAsString(BankAccountOperation(accountNumber, 121.50))))
                 .andExpect(status().isOk)
                 .andExpect(jsonPath("$.accountNumber", `is`(accountNumber)))
                 .andExpect(jsonPath("$.balance", `is`(9.50)))
@@ -87,10 +92,19 @@ class BankAccountApiApplicationTests {
 
         mvc.perform(post("/api/account/withdrawal")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(AccountOperation(accountNumber, 121.50))))
-                .andExpect(status().is4xxClientError)
-                .andExpect(jsonPath("$.accountNumber", `is`(accountNumber)))
-                .andExpect(jsonPath("$.message", `is`("Unauthorized operation: amount exceeds account balance")))
+                .content(objectMapper.writeValueAsString(BankAccountOperation(accountNumber, 121.50))))
+                .andExpect(status().`is`(400))
+//                .andExpect(jsonPath("$.accountNumber", `is`(accountNumber)))
+//                .andExpect(jsonPath("$.message", `is`("Unauthorized operation: amount exceeds account balance")))
+    }
+
+    @Test
+    fun `Given I don't have an account, When I make a withdrawal, Then I get an error`() {
+        mvc.perform(post("/api/account/withdrawal")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(BankAccountOperation(1, 121.50))))
+                .andExpect(status().`is`(404))
+//                .andExpect(jsonPath("$.message", `is`("Unauthorized operation: amount exceeds account balance")))
     }
 
     // endregion Withdrawal
@@ -102,14 +116,14 @@ class BankAccountApiApplicationTests {
 
         mvc.perform(post("/api/account/deposit")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(AccountOperation(accountNumber, 20.05))))
+                .content(objectMapper.writeValueAsString(BankAccountOperation(accountNumber, 20.05))))
                 .andExpect(status().isOk)
                 .andExpect(jsonPath("$.accountNumber", `is`(accountNumber)))
                 .andExpect(jsonPath("$.balance", `is`(100.05)))
 
         mvc.perform(post("/api/account/withdrawal")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(AccountOperation(accountNumber, 75.00))))
+                .content(objectMapper.writeValueAsString(BankAccountOperation(accountNumber, 75.00))))
                 .andExpect(status().isOk)
                 .andExpect(jsonPath("$.accountNumber", `is`(accountNumber)))
                 .andExpect(jsonPath("$.balance", `is`(25.05)))
@@ -117,7 +131,7 @@ class BankAccountApiApplicationTests {
         mvc.perform(get("/api/account/$accountNumber/statements")
                 .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk)
-                .andExpect(jsonPath("$", hasSize<List<AccountStatement>>(1)))
+                .andExpect(jsonPath("$", hasSize<List<BankAccountStatement>>(1)))
                 .andExpect(jsonPath("$.accountNumber", `is`(accountNumber)))
                 .andExpect(jsonPath("$.balance", `is`(25.05)))
     }
@@ -126,8 +140,8 @@ class BankAccountApiApplicationTests {
     fun `Given I don't have an account, When I ask a statement, Then I get an error`() {
         mvc.perform(get("/api/account/1/statements")
                 .contentType(MediaType.APPLICATION_JSON))
-                .andExpect(status().is4xxClientError)
-                .andExpect(jsonPath("$.message", `is`("Account not found")))
+                .andExpect(status().`is`(404))
+//                .andExpect(jsonPath("$.message", `is`("BankAccount not found")))
     }
 
     // endregion Statement
