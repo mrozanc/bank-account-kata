@@ -9,16 +9,12 @@ import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.mockito.Mockito.`when`
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc
 import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.boot.test.context.TestConfiguration
-import org.springframework.context.annotation.Bean
-import org.springframework.context.annotation.Import
-import org.springframework.context.annotation.Primary
-import org.springframework.context.annotation.Profile
+import org.springframework.boot.test.mock.mockito.MockBean
 import org.springframework.http.MediaType
-import org.springframework.test.context.ActiveProfiles
 import org.springframework.test.context.junit4.SpringRunner
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
@@ -26,24 +22,13 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.time.Clock
+import java.time.Instant
+import java.time.ZoneOffset
 
-@ActiveProfiles("test")
 @RunWith(SpringRunner::class)
 @SpringBootTest
 @AutoConfigureMockMvc
 class BankAccountApiApplicationTests {
-
-    @Profile("test")
-    @Import(BankAccountApiApplication::class)
-    @TestConfiguration
-    class BankAccountTestConfiguration {
-
-        @Bean
-        @Primary
-        fun clock(): Clock = PredefinedValuesClock(listOf(1551481286185,
-                1551481386185,
-                1551481486185))
-    }
 
     @Autowired
     private lateinit var mvc: MockMvc
@@ -51,7 +36,7 @@ class BankAccountApiApplicationTests {
     @Autowired
     private lateinit var accountService: BankAccountService
 
-    @Autowired
+    @MockBean
     private lateinit var clock: Clock
 
     @Autowired
@@ -60,7 +45,16 @@ class BankAccountApiApplicationTests {
     @Before
     fun setUp() {
         (accountService as KataBankAccountService).reset()
-        (clock as PredefinedValuesClock).reset()
+        `when`(clock.zone).thenReturn(ZoneOffset.UTC)
+        `when`(clock.instant()).thenReturn(Instant.ofEpochMilli(1551481286185))
+                .thenReturn(Instant.ofEpochMilli(1551481386185))
+                .thenReturn(Instant.ofEpochMilli(1551481486185))
+    }
+
+    @Test
+    fun `When I create an account Then the default amount is 0`() {
+        val accountNumber = accountService.createAccount().accountNumber
+        assertEquals(0.00, accountService.getAccount(accountNumber).balance, 0.01)
     }
 
     // region Deposit
@@ -80,6 +74,18 @@ class BankAccountApiApplicationTests {
                 .andExpect(jsonPath("$.balance", `is`(133.05)))
 
         assertEquals(133.05, accountService.getAccount(accountNumber).balance, 0.01)
+    }
+
+    @Test
+    fun `Given I have an account, When I make a deposit And the amount is negative, Then I get an error`() {
+        val accountNumber = accountService.createAccount(12.00).accountNumber
+
+        mvc.perform(post("/api/account/deposit")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(BankAccountOperation(accountNumber, -10.00))))
+                .andExpect(status().`is`(400))
+
+        assertEquals(12.00, accountService.getAccount(accountNumber).balance, 0.01)
     }
 
     @Test
@@ -107,6 +113,8 @@ class BankAccountApiApplicationTests {
                 .andExpect(status().isOk)
                 .andExpect(jsonPath("$.accountNumber", `is`(accountNumber)))
                 .andExpect(jsonPath("$.balance", `is`(9.50)))
+
+        assertEquals(9.50, accountService.getAccount(accountNumber).balance, 0.01)
     }
 
     @Test
@@ -119,6 +127,20 @@ class BankAccountApiApplicationTests {
                 .andExpect(status().`is`(400))
 //                .andExpect(jsonPath("$.accountNumber", `is`(accountNumber)))
 //                .andExpect(jsonPath("$.message", `is`("Unauthorized operation: amount exceeds account balance")))
+
+        assertEquals(5.00, accountService.getAccount(accountNumber).balance, 0.01)
+    }
+
+    @Test
+    fun `Given I have an account, When I make a withdrawal And the amount is negative Then I get an error`() {
+        val accountNumber = accountService.createAccount(131.00).accountNumber
+
+        mvc.perform(post("/api/account/withdrawal")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(BankAccountOperation(accountNumber, -121.50))))
+                .andExpect(status().`is`(400))
+
+        assertEquals(131.00, accountService.getAccount(accountNumber).balance, 0.01)
     }
 
     @Test
@@ -135,8 +157,6 @@ class BankAccountApiApplicationTests {
     // region Statement
     @Test
     fun `Given I have an account, When I make operations And I ask a statement, Then I can see my history`() {
-        println(System.currentTimeMillis())
-
         val accountNumber = accountService.createAccount(80.00).accountNumber
 
         mvc.perform(post("/api/account/deposit")
